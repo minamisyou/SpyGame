@@ -137,6 +137,7 @@ function onMissionEnd(result) {
     ['확보 데이터', result.terminals],
     ['발각 횟수', result.detections],
     ['무력화', result.knockouts],
+    ['동료 발견됨', result.bodiesFound],
     ['파괴한 조명', result.lightsOut],
     ['점수', result.score],
   ].map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');

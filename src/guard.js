@@ -100,10 +100,13 @@ export class Guard {
 
       if (inCone || brushing) {
         this.canSeePlayer = true;
-        const exposure = clamp(p.exposure, 0.06, 1);
+        const exposure = clamp(p.exposure, 0.04, 1);
         const proximity = 1 - d / range;
         const focus = inCone ? 1 - (off / (this.viewFov / 2)) * 0.35 : 0.6;
-        gain = (0.42 + 1.55 * proximity) * (0.22 + 1.05 * exposure) * focus;
+        // The exposure term has a very low floor on purpose: standing still in
+        // real shadow should read as "he walked right past me", while a lit
+        // silhouette gets picked up in well under a second.
+        gain = (0.42 + 1.55 * proximity) * (0.08 + 1.3 * exposure) * focus;
         if (this.alerted) gain *= 1.7;
         if (brushing) gain = Math.max(gain, 1.3);
       }

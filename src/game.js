@@ -39,7 +39,7 @@ export class Game {
     this.lastKnownMarker = null;
 
     this.alarmLevel = 0;
-    this.alarmCooldown = 0;
+    this.reportedBodies = new Set();
     this.state = MISSION.RUNNING;
     this.time = 0;
     this.usingTouch = false;
@@ -111,7 +111,6 @@ export class Game {
   update(dt) {
     if (this.state !== MISSION.RUNNING) return;
     this.time += dt;
-    this.alarmCooldown = Math.max(0, this.alarmCooldown - dt);
 
     this.player.update(dt, this);
     this.handleActions(dt);
@@ -454,13 +453,36 @@ export class Game {
     for (const g of this.guards) g.hear(this, x, y, radius, kind);
   }
 
+  /** True while anybody is actively hunting the player. */
+  get hunted() {
+    return this.guards.some((g) => !g.down && g.alerted);
+  }
+
+  /**
+   * One "detection" is one transition from unnoticed to hunted — not one per
+   * guard and not one per second, so the HUD counter matches what the player
+   * actually experienced.
+   */
+  escalate(sourceGuard, x, y) {
+    this.lastKnownMarker = { x, y, life: 4 };
+    this.alarmLevel = Math.min(3, this.alarmLevel + 1);
+    this.stats.detections++;
+    audio.alert();
+    audio.alarm();
+    if (sourceGuard) this.say(sourceGuard, '!');
+    this.hooks.onDetected?.(this.alarmLevel);
+    this.toast(this.alarmLevel >= 3 ? '경보 최대 · 임무 실패' : `발각 · 경보 ${this.alarmLevel}/3`);
+  }
+
   raiseAlarm(guard, x, y) {
-    const wasAlert = guard.state === GUARD_STATE.ALERT;
+    if (guard.state === GUARD_STATE.ALERT) {
+      guard.lastKnown = { x, y };
+      guard.detect = 1;
+      return;
+    }
+    const alreadyHunted = this.hunted;
     guard.goAlert(this, x, y);
     guard.detect = 1;
-    if (wasAlert) return;
-
-    this.lastKnownMarker = { x, y, life: 4 };
 
     // Radio: everyone in earshot converges.
     for (const other of this.guards) {
@@ -468,32 +490,19 @@ export class Game {
       if (dist(other.x, other.y, guard.x, guard.y) < 520) other.goAlert(this, x, y);
     }
 
-    if (this.alarmCooldown <= 0) {
-      this.alarmLevel = Math.min(3, this.alarmLevel + 1);
-      this.alarmCooldown = 6;
-      this.stats.detections++;
-      audio.alert();
-      audio.alarm();
-      this.say(guard, '!');
-      this.hooks.onDetected?.(this.alarmLevel);
-      this.toast(this.alarmLevel >= 3 ? '경보 최대 · 임무 실패' : `발각 · 경보 ${this.alarmLevel}/3`);
-    }
+    if (!alreadyHunted) this.escalate(guard, x, y);
+    else this.lastKnownMarker = { x, y, life: 4 };
   }
 
   cameraSpotted(cam) {
     const p = this.player;
+    const alreadyHunted = this.hunted;
     this.toast('카메라에 포착됨');
     for (const g of this.guards) {
       if (!g.down && dist(g.x, g.y, p.x, p.y) < 900) g.goAlert(this, p.x, p.y);
     }
-    this.lastKnownMarker = { x: p.x, y: p.y, life: 4 };
-    if (this.alarmCooldown <= 0) {
-      this.alarmLevel = Math.min(3, this.alarmLevel + 1);
-      this.alarmCooldown = 6;
-      this.stats.detections++;
-      audio.alarm();
-      this.hooks.onDetected?.(this.alarmLevel);
-    }
+    if (!alreadyHunted) this.escalate(null, p.x, p.y);
+    else this.lastKnownMarker = { x: p.x, y: p.y, life: 4 };
   }
 
   onGuardDown(guard) {
@@ -501,7 +510,6 @@ export class Game {
   }
 
   onBodyFound(finder, body) {
-    this.stats.bodiesFound++;
     this.say(finder, '!');
     finder.investigate(this, body.x, body.y, true);
     for (const g of this.guards) {
@@ -509,13 +517,15 @@ export class Game {
         g.investigate(this, body.x, body.y, true);
       }
     }
-    if (this.alarmCooldown <= 0) {
-      this.alarmLevel = Math.min(3, this.alarmLevel + 1);
-      this.alarmCooldown = 6;
-      audio.alarm();
-      this.toast(`동료 발견됨 · 경보 ${this.alarmLevel}/3`);
-      this.hooks.onDetected?.(this.alarmLevel);
-    }
+    // One body raises the alarm once, however many guards trip over it —
+    // there is no way to hide a body, so stacking the cost would be unfair.
+    if (this.reportedBodies.has(body.index)) return;
+    this.reportedBodies.add(body.index);
+    this.stats.bodiesFound++;
+    this.alarmLevel = Math.min(3, this.alarmLevel + 1);
+    audio.alarm();
+    this.toast(`동료 발견됨 · 경보 ${this.alarmLevel}/3`);
+    this.hooks.onDetected?.(this.alarmLevel);
   }
 
   onGuardCalmed(guard) {
@@ -588,6 +598,7 @@ export class Game {
       time: this.time,
       timeText: formatTime(this.time),
       detections: s.detections,
+      bodiesFound: s.bodiesFound,
       knockouts: s.knockouts,
       lightsOut: s.lightsOut,
       terminals: `${this.hackedCount}/${this.level.terminals.length}`,

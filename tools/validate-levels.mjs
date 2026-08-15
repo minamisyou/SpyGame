@@ -107,6 +107,39 @@ for (const lv of LEVELS) {
     return seen;
   };
 
+  // --- the insertion point must be safe ---
+  // A patrol node too close to '@' means a guard is standing on the player
+  // before they have touched a key. Measured as walking distance, not
+  // line-of-sight, so a node behind a wall next door is fine.
+  const SAFE_TILES = 10;
+  if (start) {
+    const distMap = new Map([[`${start.x},${start.y}`, 0]]);
+    const q = [start];
+    while (q.length) {
+      const cur = q.shift();
+      const d = distMap.get(`${cur.x},${cur.y}`);
+      if (d >= SAFE_TILES) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        if (nx < 0 || ny < 0 || ny >= h || nx >= map[ny].length) continue;
+        const key = `${nx},${ny}`;
+        if (distMap.has(key) || !walkable(map[ny][nx])) continue;
+        distMap.set(key, d + 1);
+        q.push({ x: nx, y: ny });
+      }
+    }
+    let tooClose = 0;
+    for (const [ch, pos] of nodes) {
+      const d = distMap.get(`${pos.x},${pos.y}`);
+      if (d !== undefined) {
+        fail(lv, `patrol node '${ch}' is only ${d} tiles from the insertion point (needs > ${SAFE_TILES})`);
+        tooClose++;
+      }
+    }
+    if (!tooClose) ok(`insertion point is clear of patrol nodes (> ${SAFE_TILES} tiles)`);
+  }
+
   if (start) {
     const seen = flood(true);
     // The keycard must be obtainable before any locked door is opened.
