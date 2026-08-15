@@ -79,8 +79,15 @@ export class Player {
     const inp = input;
 
     // ---- stance -------------------------------------------------------
-    const crouching = inp.isDown('KeyC', 'ControlLeft', 'ControlRight') || inp.touchDown('crouch');
-    const sprinting = (inp.isDown('ShiftLeft', 'ShiftRight') || inp.touchDown('sprint')) && !crouching;
+    // On touch, crouch is a latch (you cannot hold a button and steer at the
+    // same time) and sprint is "push the stick all the way".
+    const crouching = inp.isDown('KeyC', 'ControlLeft', 'ControlRight')
+      || (game.usingTouch ? inp.touchToggled('crouch') : inp.touchDown('crouch'));
+    const sprinting = !crouching && (
+      inp.isDown('ShiftLeft', 'ShiftRight')
+      || inp.touchDown('sprint')
+      || (game.usingTouch && inp.touch.mag > 0.86)
+    );
     this.stance = crouching ? 'crouch' : sprinting ? 'sprint' : 'stand';
     const st = STANCE[this.stance];
 
@@ -110,8 +117,14 @@ export class Player {
 
     // ---- aiming -------------------------------------------------------
     if (game.usingTouch) {
-      // Touch: face the way we move.
-      if (wants > 0.01) this.angle = turnToward(this.angle, this.moveAngle, dt * 12);
+      // Touch: face the locked target if there is one, otherwise face travel.
+      const lock = game.lockTarget;
+      if (lock) {
+        const a = Math.atan2(lock.obj.y - this.y, lock.obj.x - this.x);
+        this.angle = turnToward(this.angle, a, dt * 14);
+      } else if (wants > 0.01) {
+        this.angle = turnToward(this.angle, this.moveAngle, dt * 12);
+      }
     } else {
       const world = game.screenToWorld(inp.mouse.x, inp.mouse.y);
       this.angle = Math.atan2(world.y - this.y, world.x - this.x);

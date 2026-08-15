@@ -6,9 +6,7 @@ import { T, WALL, GLASS } from './level.js';
 import { tracePoly } from './raycast.js';
 import { clamp, TAU } from './util.js';
 import { GUARD_STATE } from './guard.js';
-
-const VIEW_W = 960;
-const VIEW_H = 544;
+import { view } from './viewport.js';
 
 /** Cheap deterministic hash for tile-to-tile texture variation. */
 function hash(x, y) {
@@ -28,14 +26,30 @@ export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.light = makeCanvas(VIEW_W, VIEW_H);
+    this.light = makeCanvas(view.w, view.h);
     this.lightCtx = this.light.getContext('2d');
-    this.fog = makeCanvas(VIEW_W, VIEW_H);
+    this.fog = makeCanvas(view.w, view.h);
     this.fogCtx = this.fog.getContext('2d');
     this.static = null;
     this.minimap = null;
     this.minimapScale = 1;
     this.time = 0;
+    this.resize();
+  }
+
+  /** Match the backing canvases to the current viewport (orientation, mode). */
+  resize() {
+    const { w, h } = view;
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    for (const c of [this.light, this.fog]) {
+      if (c.width !== w || c.height !== h) {
+        c.width = w;
+        c.height = h;
+      }
+    }
   }
 
   // ------------------------------------------------------------- prebake
@@ -112,8 +126,10 @@ export class Renderer {
   }
 
   buildMinimap(level) {
-    const mmW = 180;
-    const mmH = 130;
+    // The <canvas> is sized per display mode by main.js; follow it.
+    const el = document.getElementById('minimap');
+    const mmW = el ? el.width : 180;
+    const mmH = el ? el.height : 130;
     const s = Math.min(mmW / level.pxW, mmH / level.pxH);
     const c = makeCanvas(mmW, mmH);
     const g = c.getContext('2d');
@@ -139,9 +155,17 @@ export class Renderer {
     this.minimapOffset = { x: ox, y: oy };
   }
 
+  /** Put a context into world space: magnify, then offset by the camera. */
+  worldTransform(ctx, cam) {
+    const z = view.zoom;
+    ctx.setTransform(z, 0, 0, z, 0, 0);
+    ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+  }
+
   // ------------------------------------------------------------- frame
   draw(game, dt) {
     this.time += dt;
+    const { w: VIEW_W, h: VIEW_H } = view;
     const ctx = this.ctx;
     const { cam, level, player } = game;
 
@@ -150,7 +174,7 @@ export class Renderer {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
     ctx.save();
-    ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+    this.worldTransform(ctx, cam);
 
     // 1. baked world
     ctx.drawImage(this.static, 0, 0);
@@ -177,7 +201,7 @@ export class Renderer {
     // 4. the operative sits above the light pass — you always see yourself,
     //    the LIGHT meter is what tells you whether anyone else does.
     ctx.save();
-    ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+    this.worldTransform(ctx, cam);
     this.drawPlayer(ctx, game, player);
     this.drawCones(ctx, game);
     ctx.restore();
@@ -189,7 +213,7 @@ export class Renderer {
     // 6. grade + overlays
     if (player.nvOn) this.drawNightVision(ctx);
     ctx.save();
-    ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+    this.worldTransform(ctx, cam);
     this.drawAboveFog(ctx, game);
     ctx.restore();
     this.drawVignette(ctx, game);
@@ -503,6 +527,7 @@ export class Renderer {
 
   // ------------------------------------------------------------- lighting
   drawLighting(game) {
+    const { w: VIEW_W, h: VIEW_H } = view;
     const g = this.lightCtx;
     const { cam, level, player } = game;
     // Gameplay ambient is deliberately low (that is what keeps you hidden);
@@ -518,13 +543,13 @@ export class Renderer {
     g.fillRect(0, 0, VIEW_W, VIEW_H);
 
     g.save();
-    g.translate(-Math.round(cam.x), -Math.round(cam.y));
+    this.worldTransform(g, cam);
     g.globalCompositeOperation = 'lighter';
 
     for (const light of level.lights) {
       if (!light.alive || !light.poly) continue;
-      if (light.x + light.radius < cam.x || light.x - light.radius > cam.x + VIEW_W) continue;
-      if (light.y + light.radius < cam.y || light.y - light.radius > cam.y + VIEW_H) continue;
+      if (light.x + light.radius < cam.x || light.x - light.radius > cam.x + view.worldW) continue;
+      if (light.y + light.radius < cam.y || light.y - light.radius > cam.y + view.worldH) continue;
 
       const flick = 0.93 + 0.07 * Math.sin(this.time * 7 + light.flicker * 5);
       const r = light.radius;
@@ -591,6 +616,7 @@ export class Renderer {
 
   // ------------------------------------------------------------- fog
   drawFog(game) {
+    const { w: VIEW_W, h: VIEW_H } = view;
     const g = this.fogCtx;
     const { cam, player } = game;
     const radius = game.sightRadius;
@@ -604,7 +630,7 @@ export class Renderer {
     g.fillRect(0, 0, VIEW_W, VIEW_H);
 
     g.save();
-    g.translate(-Math.round(cam.x), -Math.round(cam.y));
+    this.worldTransform(g, cam);
     g.globalCompositeOperation = 'destination-out';
     const grad = g.createRadialGradient(player.x, player.y, 8, player.x, player.y, radius);
     grad.addColorStop(0, 'rgba(0,0,0,1)');
@@ -618,6 +644,7 @@ export class Renderer {
   }
 
   drawNightVision(ctx) {
+    const { w: VIEW_W, h: VIEW_H } = view;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = 'rgba(20,110,60,0.16)';
@@ -658,6 +685,39 @@ export class Renderer {
       ctx.restore();
     }
 
+    // Touch build: reticle on the locked target, plus a line from the muzzle
+    // so it is obvious what FIRE will hit.
+    if (game.lockTarget) {
+      const o = game.lockTarget.obj;
+      const kind = game.lockTarget.kind;
+      const col = kind === 'guard' ? '255,120,120' : kind === 'cam' ? '255,190,90' : '255,240,180';
+      const spin = this.time * 1.4;
+      ctx.save();
+      ctx.strokeStyle = `rgba(${col},0.9)`;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([6, 7]);
+      ctx.lineDashOffset = -spin * 12;
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, 18, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 4; i++) {
+        const a = spin + i * (TAU / 4);
+        ctx.beginPath();
+        ctx.moveTo(o.x + Math.cos(a) * 12, o.y + Math.sin(a) * 12);
+        ctx.lineTo(o.x + Math.cos(a) * 22, o.y + Math.sin(a) * 22);
+        ctx.stroke();
+      }
+      const p = game.player;
+      ctx.strokeStyle = `rgba(${col},0.22)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(o.x, o.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Last-known-position marker
     if (game.lastKnownMarker) {
       const m = game.lastKnownMarker;
@@ -673,6 +733,7 @@ export class Renderer {
   }
 
   drawVignette(ctx, game) {
+    const { w: VIEW_W, h: VIEW_H } = view;
     const p = game.player;
     if (p.hurtFlash > 0 || p.health < 45) {
       const a = Math.max(p.hurtFlash * 0.5, (45 - p.health) / 45 * 0.28);
@@ -690,6 +751,7 @@ export class Renderer {
   }
 
   drawMinimap(game) {
+    const { w: VIEW_W, h: VIEW_H } = view;
     const el = document.getElementById('minimap');
     if (!el || !this.minimap) return;
     const g = el.getContext('2d');
@@ -704,7 +766,7 @@ export class Renderer {
     // viewport box
     g.strokeStyle = 'rgba(255,255,255,0.22)';
     g.lineWidth = 1;
-    g.strokeRect(px(game.cam.x), py(game.cam.y), VIEW_W * s, VIEW_H * s);
+    g.strokeRect(px(game.cam.x), py(game.cam.y), view.worldW * s, view.worldH * s);
 
     for (const t of game.level.terminals) {
       g.fillStyle = t.hacked ? '#59ff9e' : '#6ec8ff';
@@ -743,5 +805,4 @@ export class Renderer {
   }
 }
 
-export { VIEW_W, VIEW_H };
 export default Renderer;

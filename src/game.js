@@ -5,7 +5,7 @@ import { rebuildLighting, visibilityPoly, hasLOS, bulletTravel } from './raycast
 import Player from './player.js';
 import Guard, { GUARD_STATE } from './guard.js';
 import SecurityCamera from './seccam.js';
-import { VIEW_W, VIEW_H } from './render.js';
+import { view } from './viewport.js';
 import input from './input.js';
 import audio from './audio.js';
 import { clamp, dist, angleDelta, lerp, formatTime } from './util.js';
@@ -50,6 +50,11 @@ export class Game {
 
     this.stats = { detections: 0, knockouts: 0, shots: 0, lightsOut: 0, bodiesFound: 0 };
 
+    // Touch aiming: you cannot aim a reticle with a thumb, so mobile locks
+    // onto whatever is worth shooting and the fire button shoots that.
+    this.lockTarget = null;
+    this.lockIndex = 0;
+
     this.playerPoly = visibilityPoly(this.level, this.player.x, this.player.y, this.sightRadius, 200);
     this.snapCamera();
   }
@@ -68,7 +73,7 @@ export class Game {
   }
 
   screenToWorld(sx, sy) {
-    return { x: sx + this.cam.x, y: sy + this.cam.y };
+    return { x: sx / view.zoom + this.cam.x, y: sy / view.zoom + this.cam.y };
   }
 
   canPlayerSee(x, y) {
@@ -78,6 +83,49 @@ export class Game {
 
   say(guard, text) {
     guard.bubble = { text, t: 1 };
+  }
+
+  /** Everything a dart could usefully hit right now, nearest first. */
+  targetCandidates() {
+    const p = this.player;
+    const out = [];
+    const add = (obj, kind) => {
+      const d = dist(p.x, p.y, obj.x, obj.y);
+      if (d > 430 || !hasLOS(this.level, p.x, p.y, obj.x, obj.y)) return;
+      out.push({ obj, kind, d });
+    };
+    for (const g of this.guards) if (!g.down) add(g, 'guard');
+    for (const c of this.cams) if (c.alive) add(c, 'cam');
+    for (const li of this.level.lights) if (li.alive) add(li, 'light');
+    out.sort((a, b) => a.d - b.d);
+    return out;
+  }
+
+  updateTargeting() {
+    if (!this.usingTouch) {
+      this.lockTarget = null;
+      return;
+    }
+    const cands = this.targetCandidates();
+    if (!cands.length) {
+      this.lockTarget = null;
+      return;
+    }
+    const still = this.lockTarget && cands.find((c) => c.obj === this.lockTarget.obj);
+    this.lockTarget = still || cands[0];
+    this.lockIndex = cands.indexOf(this.lockTarget);
+  }
+
+  cycleTarget() {
+    const cands = this.targetCandidates();
+    if (!cands.length) {
+      this.lockTarget = null;
+      audio.beep(true);
+      return;
+    }
+    const cur = cands.findIndex((c) => this.lockTarget && c.obj === this.lockTarget.obj);
+    this.lockTarget = cands[(cur + 1) % cands.length];
+    audio.beep();
   }
 
   toast(msg) {
@@ -91,7 +139,11 @@ export class Game {
    */
   cameraTarget() {
     const l = this.level;
-    const M = 150;
+    const VIEW_W = view.worldW;
+    const VIEW_H = view.worldH;
+    // Overscan past the map edge keeps the operative out of the corners (and
+    // from under the HUD). Phones see less world, so they need less of it.
+    const M = view.mode === 'mobile' ? 70 : 150;
     const x = l.pxW < VIEW_W
       ? (l.pxW - VIEW_W) / 2
       : clamp(this.player.x - VIEW_W / 2, -M, l.pxW - VIEW_W + M);
@@ -112,6 +164,7 @@ export class Game {
     if (this.state !== MISSION.RUNNING) return;
     this.time += dt;
 
+    this.updateTargeting();
     this.player.update(dt, this);
     this.handleActions(dt);
 
@@ -232,6 +285,7 @@ export class Game {
         this.toast('마취탄 소진');
       }
     }
+    if (input.touchPressed('target')) this.cycleTarget();
     if ((input.wasPressed('KeyF') || input.touchPressed('bottle')) && p.throwCooldown <= 0) {
       if (p.bottles > 0) {
         p.bottles--;
@@ -336,6 +390,11 @@ export class Game {
 
   fireDart() {
     const p = this.player;
+    // A lock-on has to be exact: snap to the target rather than firing along
+    // whatever angle the turn-rate happens to have reached this frame.
+    if (this.usingTouch && this.lockTarget) {
+      p.angle = Math.atan2(this.lockTarget.obj.y - p.y, this.lockTarget.obj.x - p.x);
+    }
     const dx = Math.cos(p.angle);
     const dy = Math.sin(p.angle);
     const maxDist = 520;

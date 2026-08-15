@@ -1,5 +1,9 @@
 /* NIGHT ECHO — UI shell
-   Dark tactical HUD. Everything scales from the 960x544 canvas stage. */
+   Two builds share one stylesheet:
+     body.desktop  fixed 960x544 frame, keyboard + mouse HUD
+     body.mobile   canvas matches the device aspect, touch controls
+   Everything inside #stage is authored in canvas pixels; the stage itself is
+   transform-scaled to fill the window, so both builds stay pixel-consistent. */
 
 :root {
   --bg: #05070c;
@@ -12,6 +16,7 @@
   --panel: rgba(8, 16, 18, 0.72);
   --edge: rgba(89, 255, 158, 0.22);
   --mono: "SF Mono", "JetBrains Mono", "Consolas", ui-monospace, monospace;
+  --pad-h: 190px;   /* height reserved for the touch controls */
 }
 
 * { box-sizing: border-box; }
@@ -24,28 +29,35 @@ html, body {
   font-family: var(--mono);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #app {
   position: fixed;
   inset: 0;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(120% 90% at 50% 0%, #0b1220 0%, #05070c 60%, #020306 100%);
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 0%, #0b1220 0%, #05070c 60%, #020306 100%);
 }
 
+/* The stage is anchored top-left and positioned entirely by JS: grid/flex
+   centering refuses to produce negative offsets, which pushes an oversized
+   stage (and its touch controls) off-screen on phones. */
 #stage {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 960px;
   height: 544px;
-  transform-origin: center center;
+  transform-origin: 0 0;
   box-shadow: 0 0 0 1px rgba(89,255,158,.14), 0 40px 120px rgba(0,0,0,.9);
   background: #04060a;
   overflow: hidden;
 }
+body.mobile #stage { box-shadow: none; }
 
 #game { display: block; width: 100%; height: 100%; }
 
@@ -111,6 +123,15 @@ html, body {
 .pip.on { background: var(--red); border-color: var(--red); box-shadow: 0 0 10px var(--red); }
 .stat-line { margin-top: 6px; font-size: 14px; color: var(--ink); opacity: .85; }
 
+.icon-btn {
+  display: none;
+  pointer-events: auto;
+  width: 42px; height: 42px;
+  background: var(--panel); border: 1px solid var(--edge);
+  color: var(--green); font-family: var(--mono); font-size: 13px;
+  border-radius: 4px;
+}
+
 .meters { min-width: 210px; }
 .meter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .meter-row label { width: 46px; font-size: 9px; color: var(--dim); }
@@ -139,13 +160,14 @@ html, body {
   border: 1px solid var(--edge);
   padding: 6px 14px; font-size: 12px; color: var(--ink);
   animation: pulse 1.6s ease-in-out infinite;
+  white-space: nowrap;
 }
 .prompt b { color: var(--green); }
 @keyframes pulse { 50% { opacity: .6; } }
 
 .hack {
   position: absolute; left: 50%; top: 58%; transform: translateX(-50%);
-  width: 260px; text-align: center;
+  width: 260px; max-width: 76%; text-align: center;
 }
 .hack-label { font-size: 10px; color: var(--green); margin-bottom: 4px; }
 .hack-bar { height: 10px; border: 1px solid var(--edge); background: rgba(0,0,0,.6); }
@@ -183,6 +205,7 @@ html, body {
   z-index: 5;
   padding: 20px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .screen-inner { width: 100%; max-width: 620px; text-align: center; }
 
@@ -221,6 +244,9 @@ h2 { margin: 0 0 10px; font-size: 22px; letter-spacing: .2em; color: #eafff3; }
   font-size: 11px; color: var(--dim); text-align: left;
   border-top: 1px solid rgba(89,255,158,.14); padding-top: 14px;
 }
+.controls-grid.for-mobile { display: none; grid-template-columns: 1fr; }
+body.mobile .controls-grid.for-desktop { display: none; }
+body.mobile .controls-grid.for-mobile { display: grid; }
 kbd {
   background: rgba(89,255,158,.1); border: 1px solid var(--edge);
   padding: 1px 6px; color: var(--green); font-family: var(--mono); font-size: 10px;
@@ -244,6 +270,19 @@ kbd {
 .btn.primary { background: rgba(89,255,158,.16); color: var(--green); border-color: var(--green); }
 .btn.primary:hover { background: var(--green); color: #04120b; }
 .btn.ghost { border-color: rgba(255,255,255,.14); color: var(--dim); }
+.btn.small { padding: 7px 14px; font-size: 10px; }
+
+/* settings */
+.setting { margin: 0 auto 22px; max-width: 420px; text-align: left; }
+.setting-label { font-size: 10px; color: var(--green); letter-spacing: .2em; margin-bottom: 8px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg button {
+  padding: 12px 6px; font-family: var(--mono); font-size: 12px;
+  background: rgba(10,20,22,.8); border: 1px solid var(--edge); color: var(--dim);
+  cursor: pointer;
+}
+.seg button.on { background: rgba(89,255,158,.18); color: var(--green); border-color: var(--green); }
+.setting-hint { font-size: 10px; color: var(--dim); line-height: 1.7; margin: 10px 0 0; }
 
 .score-grid {
   display: grid; grid-template-columns: 1fr auto; gap: 4px 20px;
@@ -255,31 +294,136 @@ kbd {
 .rank b { font-size: 40px; color: var(--green); text-shadow: 0 0 24px rgba(89,255,158,.6); vertical-align: middle; margin-left: 10px; }
 #endTitle.fail { color: var(--red); text-shadow: 0 0 26px rgba(255,84,104,.5); }
 
-/* ---------------------------------------------------------- Touch */
+/* ---------------------------------------------------------- Touch build */
 #touch { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
-.stick {
-  position: absolute; left: 22px; bottom: 22px;
-  width: 116px; height: 116px; border-radius: 50%;
-  border: 1px solid var(--edge); background: rgba(10,20,22,.35);
+
+.stick-zone {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 52%; height: var(--pad-h);
   pointer-events: auto;
+  background:
+    radial-gradient(70% 90% at 30% 80%, rgba(89,255,158,.05), transparent 70%);
 }
+.stick {
+  position: absolute;            /* placed at the touch point, in stage px */
+  width: 128px; height: 128px; margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  border: 1px solid rgba(89,255,158,.3);
+  background: rgba(10,20,22,.28);
+  opacity: 0; transition: opacity .12s;
+  pointer-events: none;
+}
+.stick.live { opacity: 1; }
 .stick-knob {
-  position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px;
-  border-radius: 50%; background: rgba(89,255,158,.28); border: 1px solid var(--green);
+  position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px;
+  border-radius: 50%; background: rgba(89,255,158,.3); border: 1px solid var(--green);
+  box-shadow: 0 0 18px rgba(89,255,158,.35);
 }
-.touch-buttons {
-  position: absolute; right: 18px; bottom: 22px;
-  display: grid; grid-template-columns: repeat(2, 62px); gap: 10px;
+.stick-hint {
+  position: absolute; left: 14px; bottom: 10px;
+  font-size: 9px; color: rgba(120,180,160,.45); letter-spacing: .1em;
+}
+
+.pad {
+  position: absolute; right: 10px; bottom: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 8px;
+  justify-items: center; align-items: end;
   pointer-events: auto;
 }
 .tbtn {
-  height: 56px; border-radius: 50%;
-  background: rgba(10,24,24,.6); border: 1px solid var(--edge); color: var(--green);
-  font-family: var(--mono); font-size: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 66px; height: 66px; border-radius: 50%;
+  background: rgba(10,24,24,.62); border: 1px solid var(--edge); color: var(--green);
+  font-family: var(--mono); font-size: 12px; line-height: 1.2;
+  backdrop-filter: blur(2px);
+  transition: background .08s, transform .08s;
 }
-.tbtn:active { background: rgba(89,255,158,.3); }
+.tbtn small { font-size: 8px; color: var(--dim); margin-top: 2px; }
+.tbtn.on, .tbtn:active { background: rgba(89,255,158,.32); color: #eafff3; transform: scale(.95); }
+.tbtn.on small { color: #bfeed8; }
+.tbtn.tiny { width: 50px; height: 50px; font-size: 11px; }
+.tbtn.tiny small { font-size: 7px; }
+.tbtn.fire {
+  width: 88px; height: 88px;
+  border-color: var(--green); background: rgba(89,255,158,.16);
+  font-size: 14px; letter-spacing: .08em;
+}
+.tbtn.latch { border-style: dashed; }
+
+/* ---------------------------------------------------------- Mobile HUD */
+body.mobile #hud { font-size: 11px; }
+body.mobile .hud-top { padding: 8px; gap: 8px; align-items: flex-start; }
+body.mobile .panel { padding: 6px 8px; }
+body.mobile .objectives { min-width: 0; max-width: 54%; }
+body.mobile .objectives li { font-size: 10px; line-height: 1.45; }
+body.mobile .alarm { min-width: 0; margin-left: auto; }
+body.mobile .pip { width: 18px; height: 6px; }
+body.mobile .stat-line { font-size: 12px; margin-top: 4px; }
+body.mobile .icon-btn { display: block; }
+
+/* meters + gear float above the control pad instead of sitting on the edge */
+body.mobile .hud-bottom {
+  display: block; padding: 0; inset: 0;
+}
+body.mobile .meters {
+  position: absolute; left: 8px; bottom: calc(var(--pad-h) + 40px);
+  min-width: 0; width: 46%;
+}
+body.mobile .meter-row label { width: 34px; font-size: 8px; }
+body.mobile .meter { height: 6px; }
+body.mobile .stance-line { font-size: 9px; margin-top: 4px; }
+body.mobile .gear {
+  position: absolute; right: 8px; bottom: calc(var(--pad-h) + 40px);
+  gap: 10px;
+}
+body.mobile .gear-item b { font-size: 14px; }
+body.mobile #minimap {
+  width: 116px; height: 84px;
+  right: 8px; bottom: auto; top: 96px;
+}
+body.mobile .prompt {
+  bottom: calc(var(--pad-h) + 76px);
+  font-size: 11px; padding: 6px 12px;
+}
+body.mobile .hack { top: 40%; }
+body.mobile .toast { top: 62px; font-size: 11px; }
+
+/* Mobile screens: tighter type, full-width buttons */
+body.mobile h1 { font-size: 28px; letter-spacing: .22em; }
+body.mobile h2 { font-size: 18px; }
+body.mobile .tagline { font-size: 9px; margin-bottom: 14px; }
+body.mobile .screen { padding: 14px; align-items: start; }
+body.mobile .screen-inner { padding: 12px 0 28px; }
+body.mobile .logo .goggles i { width: 20px; height: 20px; }
+body.mobile .mcard { font-size: 12px; padding: 12px; grid-template-columns: 28px 1fr auto; }
+body.mobile .controls-grid { font-size: 10px; }
+body.mobile .btn { display: block; width: 100%; margin: 8px 0 0; padding: 13px; }
+body.mobile .btn.small { width: auto; display: inline-block; }
+body.mobile .brief p { font-size: 11px; line-height: 1.7; }
+body.mobile .brief-rules { flex-direction: column; gap: 4px; }
+body.mobile .score-grid { font-size: 11px; }
+
+/* Portrait phones: shorter control block, stack the meters row */
+body.mobile.portrait { --pad-h: 210px; }
+body.mobile:not(.portrait) { --pad-h: 150px; }
+body.mobile:not(.portrait) .stick-zone { width: 42%; }
+/* Landscape has no room above the pad, so the readouts tuck into the corners
+   the thumbs never cover. */
+body.mobile:not(.portrait) .meters {
+  top: 96px; bottom: auto; left: 8px; width: 208px;
+}
+body.mobile:not(.portrait) .gear {
+  bottom: 14px; right: 250px;
+}
+body.mobile:not(.portrait) .tbtn { width: 58px; height: 58px; }
+body.mobile:not(.portrait) .tbtn.tiny { width: 44px; height: 44px; }
+body.mobile:not(.portrait) .tbtn.fire { width: 74px; height: 74px; }
+body.mobile:not(.portrait) #minimap { width: 96px; height: 70px; top: 88px; }
 
 @media (max-width: 700px) {
-  h1 { font-size: 30px; }
-  .controls-grid { grid-template-columns: 1fr; }
+  body.desktop h1 { font-size: 30px; }
+  body.desktop .controls-grid { grid-template-columns: 1fr; }
 }
