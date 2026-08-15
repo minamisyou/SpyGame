@@ -1,0 +1,12 @@
+{
+  "name": "night-echo",
+  "version": "1.0.0",
+  "description": "NIGHT ECHO — a top-down stealth infiltration game that runs on GitHub Pages. No build step, no dependencies.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "validate": "node tools/validate-levels.mjs"
+  },
+  "license": "MIT"
+}
