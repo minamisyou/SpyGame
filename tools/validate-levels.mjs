@@ -64,9 +64,12 @@ for (const lv of LEVELS) {
   if (counts['@'] !== 1) fail(lv, `expected exactly one '@', found ${counts['@'] || 0}`);
   if (counts['X'] !== 1) fail(lv, `expected exactly one 'X', found ${counts['X'] || 0}`);
   if (!counts['I']) fail(lv, 'no data terminals');
+  // Configs pair to 'C' tiles by row-major order, so the counts must match
+  // exactly — a spare config is silently ignored and a missing one falls back
+  // to defaults, both of which hide a level-authoring mistake.
   const camCount = counts['C'] || 0;
-  if (camCount > (lv.cams || []).length) {
-    fail(lv, `${camCount} 'C' markers but only ${(lv.cams || []).length} camera configs`);
+  if (camCount !== (lv.cams || []).length) {
+    fail(lv, `${camCount} 'C' markers but ${(lv.cams || []).length} camera configs`);
   }
   if ((counts['+'] || 0) > 0 && !(counts['K'] || 0)) fail(lv, 'locked door but no keycard');
   ok(`${counts['I']} terminals · ${counts['*'] || 0} lights · ${camCount} cameras · ${nodes.size} nav nodes`);
