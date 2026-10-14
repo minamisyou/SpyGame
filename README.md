@@ -16,6 +16,12 @@ GitHub Pages를 켜면 아래 주소에서 바로 플레이할 수 있습니다:
 https://minamisyou.github.io/SpyGame/
 ```
 
+### 3D 버전
+
+`3d/` 폴더에 three.js로 렌더링하는 3D 판이 있습니다 (`https://minamisyou.github.io/SpyGame/3d/`).
+게임 로직은 `src/` 모듈을 그대로 공유하고 렌더러만 다릅니다. 진행 기록도 2D판과 공유됩니다.
+`V`로 사선/수직 시점 전환, 마우스 휠로 줌. 자세한 내용은 [`3d/README.md`](3d/README.md).
+
 ### 두 가지 빌드
 
 접속 환경을 자동으로 판별해 **모바일 버전** 또는 **데스크톱 버전**으로 들어갑니다.
