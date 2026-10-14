@@ -5,6 +5,7 @@ import { GUARD_STATE } from './guard.js';
 import { STANCE } from './player.js';
 
 const $ = (id) => document.getElementById(id);
+const tx = (v) => window.gameText ? window.gameText(v) : v;
 
 export class Hud {
   constructor() {
@@ -38,12 +39,12 @@ export class Hud {
   }
 
   setMission(level) {
-    this.el.missionName.textContent = level.name;
+    this.el.missionName.textContent = tx(level.name);
     this.lastObjSignature = '';
   }
 
   toast(msg) {
-    this.el.toast.textContent = msg;
+    this.el.toast.textContent = tx(msg);
     this.el.toast.classList.add('show');
     this.toastTimer = 2.6;
   }
@@ -80,7 +81,7 @@ export class Hud {
         },
       ];
       this.el.objectives.innerHTML = items
-        .map((i) => `<li class="${i.done ? 'done' : i.active ? 'active' : ''}">${i.text}</li>`)
+        .map((i) => `<li class="${i.done ? 'done' : i.active ? 'active' : ''}">${tx(i.text)}</li>`)
         .join('');
     }
 
@@ -92,7 +93,7 @@ export class Hud {
     this.el.light.style.width = `${clamp(p.exposure, 0, 1) * 100}%`;
     this.el.sound.style.width = `${clamp(p.noiseLevel, 0, 1) * 100}%`;
     this.el.health.style.width = `${clamp(p.health / 100, 0, 1) * 100}%`;
-    this.el.stance.textContent = STANCE[p.stance].label;
+    this.el.stance.textContent = tx(STANCE[p.stance].label);
 
     // gear -------------------------------------------------------------
     this.el.ammo.textContent = p.ammo;
@@ -103,7 +104,7 @@ export class Hud {
 
     // prompt + hack ------------------------------------------------------
     if (game.promptText) {
-      this.el.prompt.innerHTML = game.promptText;
+      this.el.prompt.innerHTML = tx(game.promptText);
       this.el.prompt.classList.remove('hidden');
     } else {
       this.el.prompt.classList.add('hidden');

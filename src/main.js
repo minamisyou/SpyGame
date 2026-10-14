@@ -10,6 +10,7 @@ import { store, formatTime } from './util.js';
 import { view, layout, MODE, getPreference, setPreference, detectMode } from './viewport.js';
 
 const $ = (id) => document.getElementById(id);
+const tx = (v) => window.gameText ? window.gameText(v) : v;
 const SAVE_KEY = 'nightecho.progress.v1';
 
 layout(); // establish body classes + view size before anything measures itself
@@ -97,8 +98,8 @@ function buildMissionSelect() {
     btn.disabled = !unlocked;
     btn.innerHTML = `
       <span class="num">${String(i + 1).padStart(2, '0')}</span>
-      <span>${unlocked ? lv.name : '● ● ● ● ●'}
-        <span class="sub">${unlocked ? lv.codename : '이전 임무를 완수하면 해금'}</span>
+      <span>${unlocked ? tx(lv.name) : '● ● ● ● ●'}
+        <span class="sub">${unlocked ? tx(lv.codename) : tx('이전 임무를 완수하면 해금')}</span>
       </span>
       <span class="best">${best ? `RANK ${best.rank}<br>${formatTime(best.time)}` : ''}</span>`;
     btn.addEventListener('click', () => {
@@ -112,13 +113,13 @@ function buildMissionSelect() {
 
 function openBriefing() {
   const lv = LEVELS[levelIndex];
-  $('briefName').textContent = `${String(levelIndex + 1).padStart(2, '0')} · ${lv.name}`;
-  $('briefText').textContent = lv.brief;
+  $('briefName').textContent = `${String(levelIndex + 1).padStart(2, '0')} · ${tx(lv.name)}`;
+  $('briefText').textContent = tx(lv.brief);
   $('briefObjectives').innerHTML = [
     `데이터 단말 ${lv.map.join('').split('I').length - 1}곳 해킹`,
     '탈출 지점(EXIT)으로 이동',
     lv.lockedDoorHint ? `${lv.lockedDoorHint} — 키카드를 찾을 것` : '경비는 비살상으로만 무력화',
-  ].map((t) => `<li>${t}</li>`).join('');
+  ].map((t) => `<li>${tx(t)}</li>`).join('');
   showScreen('brief');
 }
 
@@ -156,8 +157,8 @@ $('btnWipe').addEventListener('click', () => {
   progress = { best: {} };
   store.set(SAVE_KEY, progress);
   buildMissionSelect();
-  $('btnWipe').textContent = '초기화 완료';
-  setTimeout(() => { $('btnWipe').textContent = '기록 초기화'; }, 1500);
+  $('btnWipe').textContent = tx('초기화 완료');
+  setTimeout(() => { $('btnWipe').textContent = tx('기록 초기화'); }, 1500);
 });
 
 // ------------------------------------------------------------------ mission
@@ -165,7 +166,7 @@ function startMission() {
   audio.init();
   const def = LEVELS[levelIndex];
   game = new Game(def, {
-    onToast: (msg) => hud.toast(msg),
+    onToast: (msg) => hud.toast(tx(msg)),
     onDetected: () => {
       hud.flash();
       if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
@@ -198,8 +199,8 @@ function onMissionEnd(result) {
   title.textContent = result.success ? 'MISSION COMPLETE' : 'MISSION FAILED';
   title.classList.toggle('fail', !result.success);
   $('endSub').textContent = result.success
-    ? (result.ghost ? '완전 은신 · 흔적 없음 · GHOST' : '침투 완료. 흔적은 남았지만 목표는 확보했다.')
-    : (result.failReason || '작전 중단');
+    ? (result.ghost ? tx('완전 은신 · 흔적 없음 · GHOST') : tx('침투 완료. 흔적은 남았지만 목표는 확보했다.'))
+    : tx(result.failReason || '작전 중단');
 
   $('scoreGrid').innerHTML = [
     ['소요 시간', result.timeText],
@@ -209,7 +210,7 @@ function onMissionEnd(result) {
     ['동료 발견됨', result.bodiesFound],
     ['파괴한 조명', result.lightsOut],
     ['점수', result.score],
-  ].map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
+  ].map(([k, v]) => `<span>${tx(k)}</span><b>${v}</b>`).join('');
 
   $('rankText').textContent = result.rank;
   $('btnNext').classList.toggle('hidden', !result.success || levelIndex >= LEVELS.length - 1);

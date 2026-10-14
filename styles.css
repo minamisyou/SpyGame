@@ -424,6 +424,9 @@ body.mobile:not(.portrait) .tbtn.fire { width: 74px; height: 74px; }
 body.mobile:not(.portrait) #minimap { width: 96px; height: 70px; top: 88px; }
 
 @media (max-width: 700px) {
+  .btn.small { min-height: 60px; padding-top: 18px; padding-bottom: 18px; }
   body.desktop h1 { font-size: 30px; }
   body.desktop .controls-grid { grid-template-columns: 1fr; }
 }
+
+@media(max-width:760px){html,body{max-width:100%;overflow-x:hidden}#gameWrap,canvas{max-width:100vw!important}.hud,.panel,.controls{max-width:100%!important}}
